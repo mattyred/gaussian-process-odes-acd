@@ -1,6 +1,6 @@
 from src.misc.param import Param
 from src.misc import transforms
-from src.core.kernels import RBF
+from src.core.kernels import RBF, RBFACD
 
 import numpy as np
 import torch
@@ -43,7 +43,7 @@ class DSVGP_Layer(torch.nn.Module):
                      }
     """
 
-    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True):
+    def __init__(self, D_in, D_out, M, S, q_diag=False, dimwise=True, acd_kernel=False):
         """
         @param D_in: Number of input dimensions
         @param D_out: Number of output dimensions
@@ -54,7 +54,11 @@ class DSVGP_Layer(torch.nn.Module):
         """
         super(DSVGP_Layer, self).__init__()
 
-        self.kern = RBF(D_in, D_out, dimwise)
+        if acd_kernel:
+            self.kern = RBFACD(D_in, D_out, dimwise)
+        else:
+            self.kern = RBF(D_in, D_out, dimwise)
+            
         self.q_diag = q_diag
         self.dimwise = dimwise
 

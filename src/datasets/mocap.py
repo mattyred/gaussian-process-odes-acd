@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import torch
 from sklearn.decomposition import PCA
 
 
@@ -95,6 +96,7 @@ class MocapDataset(object):
         if train:
             self.pca = PCA(n_components=self.pca_components)
             x_ = self.pca.fit_transform(x_stacked)
+            self.Pd = torch.from_numpy(self.pca.components_.T)
         else:
             x_ = self.pca.transform(x_stacked)
         x_ = np.concatenate([np.expand_dims(x_[i * T:(i + 1) * T], 0) for i in range(N)], 0)

@@ -65,6 +65,10 @@ parser.add_argument('--lr', type=float, default=0.005,
 parser.add_argument('--eval_sample_size', type=int, default=128,
                     help="Number of posterior samples to evaluate the model predictive performance")
 
+# kernel type
+parser.add_argument('--acd_kernel', type=eval, default=True,
+                    help="Specify whether to use ACD kernel")
+
 parser.add_argument('--save', type=str, default='results/mocap/gpode',
                     help="Directory name for saving all the model outputs")
 parser.add_argument('--seed', type=int, default=121,
@@ -108,7 +112,7 @@ if __name__ == '__main__':
     test_ts = torch.tensor(data_full.tst.ts)
 
     model = build_model(data_full.trn.ys, data_pca.trn.ys, latent2data_projection, args)
-
+    """
     with torch.no_grad():
         predicted_zs = compute_predictions(model, train_ts, eval_sample_size=args.eval_sample_size)
         predicted_ys = torch.stack([latent2data_projection(p) for p in predicted_zs])
@@ -121,10 +125,11 @@ if __name__ == '__main__':
                           predicted=predicted_ys,
                           ts=data_pca.trn.ts, args=args, num_obs=5,
                           name='plt_data_before_initialization')
-
-    model = initialize_and_fix_kernel_parameters(model, lengthscale_value=1.25, variance_value=0.5, fix=False)
+    """
+    model = initialize_and_fix_kernel_parameters(model, lengthscale_value=1.25, variance_value=0.5, fix=False, acd_kernel=args.acd_kernel)
     model = initialize_inducing(model, data_pca.trn.ys, data_pca.trn.ts.max(), 1e0)
     model = initialize_latents_with_data(model, data_pca.trn.ys, data_pca.trn.ts)
+    """
     with torch.no_grad():
         predicted_zs = compute_predictions(model, train_ts, eval_sample_size=args.eval_sample_size)
         predicted_ys = torch.stack([latent2data_projection(p) for p in predicted_zs])
@@ -138,7 +143,7 @@ if __name__ == '__main__':
                           predicted=predicted_ys,
                           ts=data_pca.trn.ts, args=args, num_obs=5,
                           name='plt_data_after_initialization')
-
+    """
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     loss_meter = meters.CachedRunningAverageMeter(0.98)
@@ -220,7 +225,7 @@ if __name__ == '__main__':
     logger.info("[TRAIN] LL {:.3f} | MSE {:.3f}".format(train_ll, train_mse))
     logger.info("[TEST]  LL {:.3f} | MSE {:.3f}".format(test_ll, test_mse))
 
-    logger.info("Kernel lengthscales {}".format(model.flow.odefunc.diffeq.kern.lengthscales.data))
+    #logger.info("Kernel lengthscales {}".format(model.flow.odefunc.diffeq.kern.lengthscales.data))
     logger.info("Kernel variance {}".format(model.flow.odefunc.diffeq.kern.variance.data))
     logger.info("Observation likelihood variance {}".format(model.likelihood.variance.data))
 
@@ -244,7 +249,7 @@ if __name__ == '__main__':
 
     plot_trace(loss_meter, observ_nll_meter, inducing_kl_meter, args)
     inducing_u, inducing_z = compute_inducing_variables_for_plotting(model)
-
+    """
     plot_inducing_posterior_3d(pred=train_pred_zs,
                                ts=data_full.trn.ts,
                                u=inducing_u, z=inducing_z, args=args,
@@ -254,11 +259,14 @@ if __name__ == '__main__':
                                ts=data_full.tst.ts,
                                u=inducing_u, z=inducing_z, args=args,
                                name='inducing_posterior_test')
-
+    """
+    precision = model.flow.odefunc.diffeq.kern.precision.data.cpu().detach() if args.acd_kernel else None
     np.savez(file=os.path.join(args.save, 'model_predictions.npz'),
              train_pred_zs=train_pred_zs,
              train_pred_ys=train_pred_ys,
              test_pred_zs=test_pred_zs,
              test_pred_ys=test_pred_ys,
-             obs_noisevar=obs_noisevar
+             obs_noisevar=obs_noisevar,
+             Lambda = precision,
+             Pd = data_pca.Pd
              )

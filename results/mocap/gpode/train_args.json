@@ -1,0 +1,19 @@
+{
+    "acd_kernel": true,
+    "data_seqlen": 50,
+    "data_subject": "09",
+    "dimwise": false,
+    "eval_sample_size": 128,
+    "log_freq": 20,
+    "lr": 0.005,
+    "num_features": 256,
+    "num_inducing": 100,
+    "num_iter": 10,
+    "num_latents": 5,
+    "q_diag": false,
+    "save": "/Users/mattiarosso/Desktop/ML/gaussian-process-odes-acd/results/mocap/gpode/",
+    "seed": 121,
+    "solver": "dopri5",
+    "ts_dense_scale": 2,
+    "use_adjoint": false
+}

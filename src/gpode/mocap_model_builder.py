@@ -32,7 +32,8 @@ def build_model(data_full_ys, data_pca_ys, latent2data_projection, args):
                      S=args.num_features,
                      M=args.num_inducing,
                      dimwise=args.dimwise,
-                     q_diag=args.q_diag)
+                     q_diag=args.q_diag,
+                     acd_kernel=args.acd_kernel)
 
     flow = Flow(diffeq=gp, solver=args.solver, use_adjoint=args.use_adjoint)
 

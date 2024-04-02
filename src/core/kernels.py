@@ -110,3 +110,77 @@ class RBF(torch.nn.Module):
         lengthscales = self.lengthscales.T.unsqueeze(1) if self.dimwise else self.lengthscales.unsqueeze(
             1)  # (D_in,1,D_out) or (D_in,1)
         return omega / lengthscales  # (D_in, S, D_out) or (D_in, S)
+
+
+class RBFACD(torch.nn.Module):
+
+    def __init__(self, D_in, D_out=None, dimwise=False):
+        """
+        @param D_in: Number of input dimensions
+        @param D_out: Number of output dimensions
+        @param dimwise: If True, different kernel parameters are given to output dimensions
+        """
+        super(RBFACD, self).__init__()
+        self.D_in = D_in
+        self.D_out = D_in if D_out is None else D_out
+        self.dimwise = dimwise
+        L_shape  = (D_out, D_in*(D_in+1)//2) if dimwise else (D_in*(D_in+1)//2,) 
+        variance_shape = (self.D_out,) if dimwise else (1,)
+        self.unconstrained_L = nn.Parameter(torch.ones(size=L_shape), requires_grad=True)
+        self.unconstrained_variance = nn.Parameter(torch.ones(size=variance_shape), requires_grad=True)
+        self._initialize()
+    
+    def _initialize(self):
+        init.constant_(self.unconstrained_L, invsoftplus(torch.tensor(1.3)).item())
+        init.constant_(self.unconstrained_variance, invsoftplus(torch.tensor(0.5)).item())
+
+    @property
+    def variance(self):
+        return softplus(self.unconstrained_variance)
+    
+    @property
+    def L(self):
+        return self.unconstrained_L
+
+    @property
+    def precision(self):
+        Lm = self._fill_triangular()
+        Lambda = torch.matmul(Lm, Lm.transpose(1,2)) if self.dimwise else torch.matmul(Lm, Lm.t())
+        return Lambda
+    
+    def _fill_triangular(self):
+        lower_indices = torch.tril_indices(self.D_in, self.D_in) # (2, lsize)
+        l_matrix = torch.zeros(self.D_in, self.D_in, device=self.L.device, dtype=self.L.dtype) # (input_dim, input_dim)
+        l_matrix[lower_indices.tolist()] = self.L
+        return l_matrix
+    
+    def malhanobis_dist(self, X, X2):
+        if X2 is None:
+            X2 = X
+        precision = self.precision
+        XP = torch.matmul(torch.unsqueeze(X, 1), precision)
+        X2P = torch.matmul(torch.unsqueeze(X2, 1), precision)
+        X11 = torch.squeeze(torch.matmul(XP, torch.unsqueeze(X, -1)), -1)
+        X22 = torch.squeeze(torch.matmul(X2P, torch.unsqueeze(X2, -1)), -1).t()
+        X12 = torch.matmul(torch.matmul(X, precision), X2.t())
+
+        dist = X11 - 2*X12 + X22
+
+        return dist
+    
+    def K(self, X, X2=None, presliced=False):
+        res = self.variance * torch.exp(-0.5 * self.malhanobis_dist(X, X2))
+        return res
+
+    def sample_freq(self, S, seed=None):
+        """
+        Computes random samples from the spectral density for Squared exponential kernel
+        @param S: Number of features
+        @param seed: random seed
+        @return: Tensor a random sample from standard Normal (D_in, S, D_out) if dimwise else (D_in, S)
+        """
+        omega_shape = (self.D_in, S, self.D_out) if self.dimwise else (self.D_in, S)
+        omega = sample_normal(omega_shape, seed)  # (D_in, S, D_out) or (D_in, S)
+        Lm = self._fill_triangular() # (D_out, D_in, D_in) or (D_in, D_in)
+        omega_scaled = torch.matmul(Lm, omega.transpose(1,2)).view(self.D_in, S, self.D_out) if self.dimwise else torch.matmul(Lm, omega) # (D_in, S, D_out) or (D_in, S)
+        return omega_scaled

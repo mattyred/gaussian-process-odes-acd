@@ -1,4 +1,4 @@
-from src.misc.constraint_utils import invsoftplus
+from src.misc.constraint_utils import invsoftplus, init_lower_triangular_uniform
 
 import torch
 import numpy as np
@@ -92,7 +92,7 @@ def initialize_noisevar(model, init_noisevar):
     return model
 
 
-def initialize_and_fix_kernel_parameters(model, lengthscale_value=1.25, variance_value=0.5, fix=False):
+def initialize_and_fix_kernel_parameters(model, lengthscale_value=1.25, variance_value=0.5, fix=False, acd_kernel=False):
     """
     Initializes and optionally fixes kernel parameter 
 
@@ -102,11 +102,21 @@ def initialize_and_fix_kernel_parameters(model, lengthscale_value=1.25, variance
     @param fix: a flag variable to fix kernel parameters during optimization
     @return: the model object after initialization
     """
-    model.flow.odefunc.diffeq.kern.unconstrained_lengthscales.data = invsoftplus(
-        lengthscale_value * torch.ones_like(model.flow.odefunc.diffeq.kern.unconstrained_lengthscales.data))
-    model.flow.odefunc.diffeq.kern.unconstrained_variance.data = invsoftplus(
-        variance_value * torch.ones_like(model.flow.odefunc.diffeq.kern.unconstrained_variance.data))
-    if fix:
-        model.flow.odefunc.diffeq.kern.unconstrained_lengthscales.requires_grad_(False)
-        model.flow.odefunc.diffeq.kern.unconstrained_variance.requires_grad_(False)
+
+    if acd_kernel:
+        D_in = model.flow.odefunc.diffeq.kern.D_in
+        model.flow.odefunc.diffeq.kern.unconstrained_L.data = init_lower_triangular_uniform(D_in)
+        model.flow.odefunc.diffeq.kern.unconstrained_variance.data = invsoftplus(
+            variance_value * torch.ones_like(model.flow.odefunc.diffeq.kern.unconstrained_variance.data))
+        if fix:
+            model.flow.odefunc.diffeq.kern.unconstrained_L.requires_grad_(False)
+            model.flow.odefunc.diffeq.kern.unconstrained_variance.requires_grad_(False)
+    else:
+        model.flow.odefunc.diffeq.kern.unconstrained_lengthscales.data = invsoftplus(
+            lengthscale_value * torch.ones_like(model.flow.odefunc.diffeq.kern.unconstrained_lengthscales.data))
+        model.flow.odefunc.diffeq.kern.unconstrained_variance.data = invsoftplus(
+            variance_value * torch.ones_like(model.flow.odefunc.diffeq.kern.unconstrained_variance.data))
+        if fix:
+            model.flow.odefunc.diffeq.kern.unconstrained_lengthscales.requires_grad_(False)
+            model.flow.odefunc.diffeq.kern.unconstrained_variance.requires_grad_(False)
     return model
